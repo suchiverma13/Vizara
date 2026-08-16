@@ -15,13 +15,16 @@ export const questions = [
     sampleData: [2, 7, 11, 15, 3, 6],
     tests: ['basic_pair', 'negative_numbers', 'duplicates', 'zero_target', 'large_nums', 'edge_two_items'],
     starter: `function twoSum(nums, target) {
-  // find two indices that add up to target
+  // write your solution here
+}`,
+    optimal: `function twoSum(nums, target) {
+  const seen = {}
   for (let i = 0; i < nums.length; i++) {
-    for (let j = i + 1; j < nums.length; j++) {
-      if (nums[i] + nums[j] === target) {
-        return [i, j]
-      }
+    const diff = target - nums[i]
+    if (diff in seen) {
+      return [seen[diff], i]
     }
+    seen[nums[i]] = i
   }
   return [-1, -1]
 }`,
@@ -37,11 +40,20 @@ export const questions = [
     sampleData: [5, 5, 6, 6, 6, 4],
     tests: ['palindrome', 'single_char', 'unicode', 'numbers_as_text', 'whitespace', 'long_sentence'],
     starter: `function reverseString(s) {
-  let out = ''
-  for (let i = s.length - 1; i >= 0; i--) {
-    out += s[i]
+  // write your solution here
+}`,
+    optimal: `function reverseString(s) {
+  const arr = s.split('')
+  let left = 0
+  let right = arr.length - 1
+  while (left < right) {
+    const tmp = arr[left]
+    arr[left] = arr[right]
+    arr[right] = tmp
+    left++
+    right--
   }
-  return out
+  return arr.join('')
 }`,
   },
   {
@@ -56,6 +68,9 @@ export const questions = [
     sampleData: [3, 1, 1, 2, 2, 4],
     tests: ['first_unique', 'all_repeat', 'empty', 'uppercase_mix', 'long_tail', 'single_char'],
     starter: `function firstUnique(s) {
+  // write your solution here
+}`,
+    optimal: `function firstUnique(s) {
   const count = {}
   for (let i = 0; i < s.length; i++) {
     count[s[i]] = (count[s[i]] || 0) + 1
@@ -80,6 +95,9 @@ export const questions = [
     sampleData: [-2, 1, -3, 4, -1, 2, 1, -5, 4],
     tests: ['all_negative', 'mixed', 'single_peak', 'zeros', 'large_spread', 'two_items'],
     starter: `function maxSubarray(nums) {
+  // write your solution here
+}`,
+    optimal: `function maxSubarray(nums) {
   let best = nums[0]
   let cur = 0
   for (let i = 0; i < nums.length; i++) {
@@ -100,6 +118,9 @@ export const questions = [
     sampleData: [2, 3, 3, 2, 3, 3],
     tests: ['anagram_true', 'different_length', 'same_letters', 'uppercase', 'unicode', 'empty_both'],
     starter: `function isAnagram(s, t) {
+  // write your solution here
+}`,
+    optimal: `function isAnagram(s, t) {
   if (s.length !== t.length) {
     return false
   }
@@ -128,6 +149,9 @@ export const questions = [
     sampleData: [4, 3, 3, 3, 2, 3],
     tests: ['group_three', 'single_group', 'all_unique', 'empty_input', 'uppercase', 'mixed_lengths'],
     starter: `function groupAnagrams(strs) {
+  // write your solution here
+}`,
+    optimal: `function groupAnagrams(strs) {
   const groups = {}
   for (let i = 0; i < strs.length; i++) {
     const key = strs[i].split('').sort().join('')
@@ -151,6 +175,9 @@ export const questions = [
     sampleData: [1, 2, 5, 11],
     tests: ['exact_match', 'impossible', 'single_coin', 'large_amount', 'many_denoms', 'zero_amount'],
     starter: `function coinChange(coins, amount) {
+  // write your solution here
+}`,
+    optimal: `function coinChange(coins, amount) {
   const dp = new Array(amount + 1).fill(Infinity)
   dp[0] = 0
   for (let i = 1; i <= amount; i++) {
@@ -175,6 +202,9 @@ export const questions = [
     sampleData: [5, 3, 4, 4, 3, 2],
     tests: ['full_match', 'none', 'single_char', 'interleaved', 'large_both', 'reversed'],
     starter: `function lcs(text1, text2) {
+  // write your solution here
+}`,
+    optimal: `function lcs(text1, text2) {
   const n = text1.length
   const m = text2.length
   const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0))
@@ -202,6 +232,9 @@ export const questions = [
     sampleData: [4, 5, 2, 1, 1],
     tests: ['two_islands', 'one_big', 'zero_islands', 'single_cell', 'spiral_shape', 'all_land'],
     starter: `function numIslands(grid) {
+  // write your solution here
+}`,
+    optimal: `function numIslands(grid) {
   let count = 0
   for (let i = 0; i < grid.length; i++) {
     for (let j = 0; j < grid[i].length; j++) {
@@ -234,6 +267,9 @@ function sink(grid, i, j) {
     sampleData: [5, 6, 3, 2, 1],
     tests: ['direct_edge', 'multi_hop', 'negative_weight', 'disconnected', 'large_graph', 'self_loop'],
     starter: `function shortestPath(n, edges, start) {
+  // write your solution here
+}`,
+    optimal: `function shortestPath(n, edges, start) {
   const dist = new Array(n).fill(Infinity)
   dist[start] = 0
   for (let i = 0; i < n - 1; i++) {

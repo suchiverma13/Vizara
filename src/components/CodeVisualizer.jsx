@@ -128,8 +128,11 @@ function Bars({ data }) {
 
 export default function CodeVisualizer({ code, question, runId, onRerun, onActiveLine, onVerdict }) {
   const { steps, meta } = useMemo(() => buildSteps(code), [code])
+  const optimalMeta = useMemo(() => buildSteps(question.optimal || '').meta, [question])
   const [phase, setPhase] = useState('idle')
   const [stepIdx, setStepIdx] = useState(0)
+  const [tab, setTab] = useState('exec')
+  const [unlocked, setUnlocked] = useState(false)
   const consoleRef = useRef(null)
 
   const total = question.tests.length
@@ -144,11 +147,18 @@ export default function CodeVisualizer({ code, question, runId, onRerun, onActiv
   useEffect(() => {
     setPhase('idle')
     setStepIdx(0)
+    setUnlocked(false)
+    setTab('exec')
     if (runId > 0) {
       const t = setTimeout(() => setPhase('running'), 400)
       return () => clearTimeout(t)
     }
   }, [runId])
+
+  useEffect(() => {
+    setUnlocked(false)
+    setTab('exec')
+  }, [question.id])
 
   useEffect(() => {
     if (phase !== 'running') return
@@ -166,7 +176,10 @@ export default function CodeVisualizer({ code, question, runId, onRerun, onActiv
   }, [phase, stepIdx, steps, onActiveLine])
 
   useEffect(() => {
-    if (phase === 'verdict') onVerdict?.()
+    if (phase === 'verdict') {
+      setUnlocked(true)
+      onVerdict?.()
+    }
   }, [phase, onVerdict])
 
   useEffect(() => {
@@ -181,12 +194,50 @@ export default function CodeVisualizer({ code, question, runId, onRerun, onActiv
   return (
     <div className="viz-panel">
       <div className="viz-tabs">
-        <span className="viz-tab live">Execution</span>
+        <div className="viz-tab-group">
+          <button className={`viz-tab-btn ${tab === 'exec' ? 'active' : ''}`} onClick={() => setTab('exec')}>
+            Execution
+          </button>
+          <button className={`viz-tab-btn ${tab === 'solution' ? 'active' : ''} ${unlocked ? '' : 'locked'}`} onClick={() => setTab('solution')}>
+            Optimal solution {!unlocked && '🔒'}
+          </button>
+        </div>
         <span className="viz-step">
           {phase === 'idle' ? 'ready' : phase === 'running' ? `step ${stepIdx}/${steps.length}` : 'complete'}
         </span>
       </div>
 
+      {tab === 'solution' ? (
+        <div className="viz-solution">
+          {unlocked ? (
+            <>
+              <div className="viz-solution-head">
+                <span className="complexity" style={{ borderColor: '#8b5cf666', color: '#a78bfa' }}>
+                  {optimalMeta.complexity}
+                </span>
+                <span className="meta-badge">optimal solution</span>
+              </div>
+              <pre className="viz-solution-code">{question.optimal}</pre>
+            </>
+          ) : (
+            <motion.div
+              className="viz-locked"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <motion.span
+                className="lock-glyph"
+                animate={{ scale: [1, 1.12, 1] }}
+                transition={{ duration: 2.2, repeat: Infinity }}
+              >
+                🔒
+              </motion.span>
+              <p>Run your code and get a result to unlock the optimal solution.</p>
+            </motion.div>
+          )}
+        </div>
+      ) : (
+        <>
       <div className="viz-array">
         <div className="viz-section-title">Data view</div>
         <Bars data={array} />
@@ -284,6 +335,8 @@ export default function CodeVisualizer({ code, question, runId, onRerun, onActiv
             ↻ Run again
           </motion.button>
         </motion.div>
+      )}
+        </>
       )}
     </div>
   )

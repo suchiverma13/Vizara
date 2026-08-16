@@ -1301,6 +1301,94 @@ body {
   font-size: 0.75rem;
 }
 
+.viz-tab-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-tab-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.viz-tab-btn:hover {
+  color: #c4b5fd;
+}
+
+.viz-tab-btn.active {
+  color: #a78bfa;
+  border-color: rgba(139, 92, 246, 0.5);
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.viz-tab-btn.locked {
+  opacity: 0.75;
+}
+
+.viz-solution {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 420px;
+}
+
+.viz-solution-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.viz-solution-code {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  line-height: 1.75;
+  color: #cfe8f5;
+  white-space: pre;
+  overflow-x: auto;
+  margin: 0;
+}
+
+.viz-locked {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.lock-glyph {
+  font-size: 2.4rem;
+  filter: drop-shadow(0 0 18px rgba(167, 139, 250, 0.5));
+}
+
+.viz-locked p {
+  color: var(--muted);
+  font-size: 0.85rem;
+  max-width: 280px;
+}
+
 .viz-step {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.75rem;
