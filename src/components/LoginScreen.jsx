@@ -123,7 +123,9 @@ export default function LoginScreen({ onDone, onBack }) {
             </div>
             <div className="auth-term-body" ref={logRef}>
               <AnimatePresence initial={false}>
-                {logLines.map((line, i) => (
+                {logLines.map((line, i) => {
+                  console.log('VIZDEBUG map:', JSON.stringify(line), 'logLines:', JSON.stringify(logLines))
+                  return (
                   <motion.p
                     key={`${i}-${line}`}
                     initial={{ opacity: 0, x: -10 }}
@@ -133,7 +135,8 @@ export default function LoginScreen({ onDone, onBack }) {
                   >
                     {line}
                   </motion.p>
-                ))}
+                  )
+                })}
               </AnimatePresence>
               {!busy && <motion.span className="blink-cursor" animate={{ opacity: [1, 0, 1] }} transition={{ duration: 1, repeat: Infinity }} />}
               {busy && (
