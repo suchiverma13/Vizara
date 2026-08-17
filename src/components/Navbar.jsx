@@ -3,8 +3,11 @@ import { useState } from 'react'
 
 const links = ['Levels', 'Arena', 'Leaderboard', 'Docs']
 
-export default function Navbar({ onOpenCode }) {
+export default function Navbar({ onOpenCode, user, onLogin, onProfile }) {
   const [open, setOpen] = useState(false)
+  const initials = user
+    ? user.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()
+    : ''
 
   return (
     <motion.header
@@ -49,17 +52,33 @@ export default function Navbar({ onOpenCode }) {
           </motion.button>
         </nav>
 
-        <motion.button
-          className="btn btn-ghost"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.4 }}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setOpen(!open)}
-        >
-          Play now
-        </motion.button>
+        {user ? (
+          <motion.button
+            className="nav-user-btn"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.4 }}
+            whileHover={{ scale: 1.06 }}
+            whileTap={{ scale: 0.94 }}
+            onClick={onProfile}
+          >
+            <span className="nav-avatar">{initials}</span>
+            <span className="nav-user-name">{user.name.split(' ')[0]}</span>
+            <span className="nav-user-caret">▾</span>
+          </motion.button>
+        ) : (
+          <motion.button
+            className="btn btn-ghost"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.4 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onLogin}
+          >
+            Login
+          </motion.button>
+        )}
       </div>
     </motion.header>
   )

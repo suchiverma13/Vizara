@@ -12,7 +12,7 @@ const item = {
 
 const badges = ['Array', 'Strings', 'DP', 'Graphs', 'Binary', 'Backtracking']
 
-export default function Hero({ onStart }) {
+export default function Hero({ onStart, user }) {
   return (
     <section className="hero" id="home">
       <div className="geo geo-ring" aria-hidden="true" />
@@ -45,15 +45,18 @@ export default function Hero({ onStart }) {
             whileTap={{ scale: 0.95 }}
             onClick={onStart}
           >
-            Start playing
+            {user ? 'Start playing' : 'Login to start'} →
           </motion.button>
-          <motion.button
-            className="btn btn-outline"
-            whileHover={{ scale: 1.06 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            Watch trailer
-          </motion.button>
+          {!user && (
+            <motion.button
+              className="btn btn-outline"
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={onStart}
+            >
+              Create a profile
+            </motion.button>
+          )}
         </motion.div>
 
         <motion.div variants={item} className="badge-row">

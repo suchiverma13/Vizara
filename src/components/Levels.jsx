@@ -1,8 +1,12 @@
 import { motion } from 'framer-motion'
 import { useState } from 'react'
 import { levels } from '../data/levels.js'
+import { dailyForLevel } from '../data/questions.js'
 
 const filters = ['All', 'Easy', 'Medium', 'Hard', 'Nightmare']
+
+const diffColor = (d) =>
+  d === 'Easy' ? '#34d399' : d === 'Medium' ? '#fbbf24' : '#f87171'
 
 export default function Levels({ onEnter }) {
   const [filter, setFilter] = useState('All')
@@ -68,6 +72,20 @@ export default function Levels({ onEnter }) {
             </div>
             <h3>{l.title}</h3>
             <p>{l.desc}</p>
+            <div className="level-daily">
+              <span className="daily-label">Today's challenge</span>
+              <span className="daily-title">{dailyForLevel(l).title}</span>
+              <span
+                className="diff-badge"
+                style={{
+                  background: `${diffColor(dailyForLevel(l).difficulty)}1f`,
+                  color: diffColor(dailyForLevel(l).difficulty),
+                  borderColor: `${diffColor(dailyForLevel(l).difficulty)}55`,
+                }}
+              >
+                {dailyForLevel(l).difficulty} · Day {dailyForLevel(l).day}
+              </span>
+            </div>
             <div className="level-foot">
               <span className="xp">+{l.xp} XP</span>
               <motion.button

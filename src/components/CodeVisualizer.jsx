@@ -126,13 +126,12 @@ function Bars({ data }) {
   )
 }
 
-export default function CodeVisualizer({ code, question, runId, onRerun, onActiveLine, onVerdict }) {
+export default function CodeVisualizer({ code, question, runId, solutionUnlocked = false, onRerun, onActiveLine, onVerdict }) {
   const { steps, meta } = useMemo(() => buildSteps(code), [code])
   const optimalMeta = useMemo(() => buildSteps(question.optimal || '').meta, [question])
   const [phase, setPhase] = useState('idle')
   const [stepIdx, setStepIdx] = useState(0)
   const [tab, setTab] = useState('exec')
-  const [unlocked, setUnlocked] = useState(false)
   const consoleRef = useRef(null)
 
   const total = question.tests.length
@@ -147,7 +146,6 @@ export default function CodeVisualizer({ code, question, runId, onRerun, onActiv
   useEffect(() => {
     setPhase('idle')
     setStepIdx(0)
-    setUnlocked(false)
     setTab('exec')
     if (runId > 0) {
       const t = setTimeout(() => setPhase('running'), 400)
@@ -156,7 +154,6 @@ export default function CodeVisualizer({ code, question, runId, onRerun, onActiv
   }, [runId])
 
   useEffect(() => {
-    setUnlocked(false)
     setTab('exec')
   }, [question.id])
 
@@ -177,8 +174,7 @@ export default function CodeVisualizer({ code, question, runId, onRerun, onActiv
 
   useEffect(() => {
     if (phase === 'verdict') {
-      setUnlocked(true)
-      onVerdict?.()
+      onVerdict?.(passed, total)
     }
   }, [phase, onVerdict])
 
@@ -198,8 +194,8 @@ export default function CodeVisualizer({ code, question, runId, onRerun, onActiv
           <button className={`viz-tab-btn ${tab === 'exec' ? 'active' : ''}`} onClick={() => setTab('exec')}>
             Execution
           </button>
-          <button className={`viz-tab-btn ${tab === 'solution' ? 'active' : ''} ${unlocked ? '' : 'locked'}`} onClick={() => setTab('solution')}>
-            Optimal solution {!unlocked && '🔒'}
+          <button className={`viz-tab-btn ${tab === 'solution' ? 'active' : ''} ${solutionUnlocked ? '' : 'locked'}`} onClick={() => setTab('solution')}>
+            Optimal solution {!solutionUnlocked && '🔒'}
           </button>
         </div>
         <span className="viz-step">
@@ -209,7 +205,7 @@ export default function CodeVisualizer({ code, question, runId, onRerun, onActiv
 
       {tab === 'solution' ? (
         <div className="viz-solution">
-          {unlocked ? (
+          {solutionUnlocked ? (
             <>
               <div className="viz-solution-head">
                 <span className="complexity" style={{ borderColor: '#8b5cf666', color: '#a78bfa' }}>
@@ -232,7 +228,7 @@ export default function CodeVisualizer({ code, question, runId, onRerun, onActiv
               >
                 🔒
               </motion.span>
-              <p>Run your code and get a result to unlock the optimal solution.</p>
+              <p>Run your code first — the optimal solution unlocks after your first attempt.</p>
             </motion.div>
           )}
         </div>
