@@ -35,7 +35,8 @@ export default function LoginScreen({ onDone, onBack }) {
     let i = 0
     const t = setInterval(() => {
       if (i < intro.length) {
-        setLogLines((l) => [...l, intro[i]])
+        const line = intro[i]
+        setLogLines((l) => [...l, line])
         i++
       } else {
         clearInterval(t)
@@ -123,20 +124,17 @@ export default function LoginScreen({ onDone, onBack }) {
             </div>
             <div className="auth-term-body" ref={logRef}>
               <AnimatePresence initial={false}>
-                {logLines.map((line, i) => {
-                  console.log('VIZDEBUG map:', JSON.stringify(line), 'logLines:', JSON.stringify(logLines))
-                  return (
+                {logLines.map((line, i) => (
                   <motion.p
                     key={`${i}-${line}`}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.25 }}
-                    className={line.startsWith('✕') ? 'fail-txt' : line.startsWith('>') ? 'auth-log-ok' : 'auth-log'}
+                    className={String(line).startsWith('✕') ? 'fail-txt' : String(line).startsWith('>') ? 'auth-log-ok' : 'auth-log'}
                   >
                     {line}
                   </motion.p>
-                  )
-                })}
+                ))}
               </AnimatePresence>
               {!busy && <motion.span className="blink-cursor" animate={{ opacity: [1, 0, 1] }} transition={{ duration: 1, repeat: Infinity }} />}
               {busy && (
