@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -20,7 +20,6 @@ export function highlightLine(line, language = 'javascript') {
     strings.push(m)
     return `\u0000${strings.length - 1}\u0000`
   })
-  // comments: //, #, --
   if (language === 'python') {
     out = out.replace(/(#.*$)/g, (m) => `<span class="tok-cm">${m}</span>`)
   } else if (language === 'cpp' || language === 'java' || language === 'go') {
@@ -29,7 +28,6 @@ export function highlightLine(line, language = 'javascript') {
     out = out.replace(/(\/\/.*$|#.*$)/g, (m) => `<span class="tok-cm">${m}</span>`)
   }
   const kwRegex = KW[language] || KW.javascript
-  // reset regex lastIndex
   kwRegex.lastIndex = 0
   out = out.replace(kwRegex, (m) => `<span class="tok-kw">${m}</span>`)
   out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, (m) => `<span class="tok-num">${m}</span>`)
@@ -42,38 +40,65 @@ export function highlightLine(line, language = 'javascript') {
 }
 
 export default function CodeEditor({ value, onChange, onRun, activeLine, language = 'javascript' }) {
-  const preRef = useRef()
-  const taRef = useRef()
+  const preRef = useRef(null)
+  const taRef = useRef(null)
+  const gutterRef = useRef(null)
   const lines = value.split('\n')
 
-  const syncScroll = () => {
-    preRef.current.scrollTop = taRef.current.scrollTop
-    preRef.current.scrollLeft = taRef.current.scrollLeft
-  }
+  const syncScroll = useCallback(() => {
+    const ta = taRef.current
+    const pre = preRef.current
+    const gutter = gutterRef.current
+    if (!ta || !pre) return
+    pre.scrollTop = ta.scrollTop
+    pre.scrollLeft = ta.scrollLeft
+    if (gutter) gutter.scrollTop = ta.scrollTop
+  }, [])
+
+  useEffect(() => {
+    // keep highlight in sync after value changes (e.g., programmatic)
+    syncScroll()
+  }, [value, syncScroll])
 
   const handleKey = (e) => {
     if (e.key === 'Tab') {
       e.preventDefault()
       const ta = taRef.current
-      ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end')
-      onChange(ta.value)
+      if (!ta) return
+      const start = ta.selectionStart
+      const end = ta.selectionEnd
+      const before = ta.value.slice(0, start)
+      const after = ta.value.slice(end)
+      const insert = '  '
+      const next = before + insert + after
+      // update value via onChange
+      onChange(next)
+      // restore cursor after React updates
+      requestAnimationFrame(() => {
+        if (!taRef.current) return
+        taRef.current.selectionStart = taRef.current.selectionEnd = start + insert.length
+        taRef.current.focus()
+        syncScroll()
+      })
     }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
-      onRun()
+      onRun?.()
     }
   }
 
+  const focusEditor = () => taRef.current?.focus()
+
   return (
-    <div className="editor-wrap">
-      <div className="editor-gutter">
+    <div className="editor-wrap" onClick={focusEditor}>
+      <div ref={gutterRef} className="editor-gutter" aria-hidden="true">
         {lines.map((_, i) => (
           <div key={i} className={`gutter-line ${i === activeLine ? 'active' : ''}`}>
             {i + 1}
           </div>
         ))}
       </div>
-      <div className="editor-body">
+      <div className="editor-body" onClick={focusEditor}>
         <pre ref={preRef} className="editor-highlight" aria-hidden="true">
           {lines.map((l, i) => (
             <div
@@ -95,6 +120,9 @@ export default function CodeEditor({ value, onChange, onRun, activeLine, languag
           autoCorrect="off"
           autoCapitalize="off"
           wrap="off"
+          autoFocus
+          aria-label="Code editor"
+          placeholder="// start typing..."
         />
       </div>
     </div>
