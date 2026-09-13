@@ -3,36 +3,60 @@ const SESSION_KEY = 'vizara-session'
 
 const todayKey = () => new Date().toISOString().slice(0, 10)
 
-const hash = (s) => {
+// Hardened hash: djb2 with salt + 3 rounds (client-side only — replace with bcrypt/argon2 on backend for production)
+const hash = (s, salt = 'vizara-v2') => {
+  const str = salt + s + salt
   let h = 5381
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0
-  return h.toString(36)
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0
+  for (let r = 0; r < 2; r++) {
+    const hs = h.toString(36) + salt
+    let nh = 5381
+    for (let i = 0; i < hs.length; i++) nh = ((nh << 5) + nh + hs.charCodeAt(i)) >>> 0
+    h = nh
+  }
+  return h.toString(36) + '-' + (h >>> 0).toString(16).padStart(8, '0')
 }
 
+const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined'
+
 const load = (key, fallback) => {
+  if (!isBrowser) return fallback
   try {
-    return JSON.parse(localStorage.getItem(key)) ?? fallback
+    const v = localStorage.getItem(key)
+    if (v == null) return fallback
+    return JSON.parse(v) ?? fallback
   } catch {
     return fallback
   }
 }
 
-const save = (key, v) => localStorage.setItem(key, JSON.stringify(v))
+const save = (key, v) => {
+  if (!isBrowser) return
+  try { localStorage.setItem(key, JSON.stringify(v)) } catch {}
+}
 
 export const attemptKey = (uid) => `vizara-attempts-${uid}`
+
+const oldHash = (s) => {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0
+  return h.toString(36)
+}
 
 export function register(name, email, password) {
   const users = load(USERS_KEY, [])
   const id = email.trim().toLowerCase()
   if (!name.trim()) return { error: 'Please enter your name.' }
+  if (name.trim().length < 2) return { error: 'Name must be at least 2 characters.' }
   if (!/^\S+@\S+\.\S+$/.test(id)) return { error: 'Please enter a valid email.' }
-  if (password.length < 4) return { error: 'Password must be at least 4 characters.' }
+  if (password.length < 6) return { error: 'Password must be at least 6 characters.' }
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return { error: 'Password needs letters & numbers.' }
   if (users.some((u) => u.id === id)) return { error: 'An account with this email already exists.' }
   const user = {
     id,
-    name: name.trim(),
+    name: name.trim().slice(0, 40),
     email: id,
-    pass: hash(password),
+    pass: hash(password, id),
     rating: 250,
     joined: todayKey(),
   }
@@ -46,13 +70,21 @@ export function login(email, password) {
   const users = load(USERS_KEY, [])
   const id = email.trim().toLowerCase()
   const user = users.find((u) => u.id === id)
-  if (!user || user.pass !== hash(password)) return { error: 'Invalid email or password.' }
+  if (!user) return { error: 'Invalid email or password.' }
+  const ok = user.pass === hash(password, id) || user.pass === oldHash(password) || user.pass === hash(password)
+  if (!ok) return { error: 'Invalid email or password.' }
+  // migrate old hash
+  if (user.pass === oldHash(password)) {
+    user.pass = hash(password, id)
+    save(USERS_KEY, users)
+  }
   save(SESSION_KEY, id)
   return { user }
 }
 
 export function logout() {
-  localStorage.removeItem(SESSION_KEY)
+  if (!isBrowser) return
+  try { localStorage.removeItem(SESSION_KEY) } catch {}
 }
 
 export function getSession() {
@@ -60,6 +92,75 @@ export function getSession() {
   if (!id) return null
   const users = load(USERS_KEY, [])
   return users.find((u) => u.id === id) || null
+}
+
+// ---------- Password Reset (forgot / reset) ----------
+const RESETS_KEY = 'vizara-resets'
+const LAST_EMAIL_KEY = 'vizara-last-reset-email'
+
+export function requestPasswordReset(email) {
+  const id = email.trim().toLowerCase()
+  if (!/^\S+@\S+\.\S+$/.test(id)) return { error: 'Please enter a valid email.' }
+  const users = load(USERS_KEY, [])
+  const user = users.find((u) => u.id === id)
+  if (!user) return { error: 'No account found with this email.' }
+  const token = Math.random().toString(36).slice(2, 6).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase()
+  const expires = Date.now() + 15 * 60 * 1000 // 15 min
+  const resets = load(RESETS_KEY, {})
+  resets[id] = { token, expires }
+  save(RESETS_KEY, resets)
+  const emailRecord = { to: id, token, expires, sentAt: new Date().toISOString(), name: user.name }
+  save(LAST_EMAIL_KEY, emailRecord)
+  // In production, call backend to send real email:
+  // fetch('/api/send-reset-email', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email: id, token, name: user.name }) })
+  // try/catch — if fetch fails, fallback to mock (above already saved). We fire-and-forget:
+  try {
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/send-reset-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: id, token, name: user.name }),
+      }).catch(() => {})
+    }
+  } catch {}
+  return { token, email: id }
+}
+
+export function getLastResetEmail() {
+  return load(LAST_EMAIL_KEY, null)
+}
+
+export function resetPassword(email, token, newPassword) {
+  const id = email.trim().toLowerCase()
+  const t = (token || '').trim().toUpperCase()
+  if (!/^\S+@\S+\.\S+$/.test(id)) return { error: 'Please enter a valid email.' }
+  if (!t) return { error: 'Please enter the reset code.' }
+  if (newPassword.length < 6) return { error: 'Password must be at least 6 characters.' }
+  if (!/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) return { error: 'Password needs letters & numbers.' }
+  const resets = load(RESETS_KEY, {})
+  const rec = resets[id]
+  if (!rec || rec.token !== t) return { error: 'Invalid reset code. Check your email.' }
+  if (Date.now() > rec.expires) {
+    delete resets[id]
+    save(RESETS_KEY, resets)
+    return { error: 'Reset code expired. Please request a new one.' }
+  }
+  const users = load(USERS_KEY, [])
+  const user = users.find((u) => u.id === id)
+  if (!user) return { error: 'No account found.' }
+  user.pass = hash(newPassword, id)
+  save(USERS_KEY, users)
+  delete resets[id]
+  save(RESETS_KEY, resets)
+  save(SESSION_KEY, id)
+  return { user }
+}
+
+export function verifyResetToken(email, token) {
+  const id = email.trim().toLowerCase()
+  const rec = load(RESETS_KEY, {})[id]
+  if (!rec) return false
+  return rec.token === token.trim().toUpperCase() && Date.now() <= rec.expires
 }
 
 export function recordAttempt({ qid, title, topic, difficulty, passed, timeTaken }) {

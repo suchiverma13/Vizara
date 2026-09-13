@@ -17,31 +17,48 @@ class SceneBoundary extends Component {
 }
 
 function makeGlowTexture() {
-  const c = document.createElement('canvas')
-  c.width = 256
-  c.height = 256
-  const ctx = c.getContext('2d')
-  const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128)
-  g.addColorStop(0, 'rgba(255, 255, 255, 0.85)')
-  g.addColorStop(0.35, 'rgba(167, 139, 250, 0.4)')
-  g.addColorStop(1, 'rgba(167, 139, 250, 0)')
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, 256, 256)
-  return new THREE.CanvasTexture(c)
+  if (typeof document === 'undefined') return null
+  try {
+    const c = document.createElement('canvas')
+    c.width = 128
+    c.height = 128
+    const ctx = c.getContext('2d')
+    if (!ctx) return null
+    const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64)
+    g.addColorStop(0, 'rgba(255, 255, 255, 0.85)')
+    g.addColorStop(0.35, 'rgba(167, 139, 250, 0.4)')
+    g.addColorStop(1, 'rgba(167, 139, 250, 0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, 128, 128)
+    const tex = new THREE.CanvasTexture(c)
+    tex.colorSpace = THREE.SRGBColorSpace
+    return tex
+  } catch {
+    return null
+  }
 }
 
-const GLOW = makeGlowTexture()
+let _glow = null
+function getGlow() {
+  if (_glow) return _glow
+  if (typeof document === 'undefined') return null
+  _glow = makeGlowTexture()
+  return _glow
+}
 
 function Nebula({ position, scale, color, speed }) {
   const ref = useRef()
+  const glow = getGlow()
   useFrame((state) => {
+    if (!ref.current) return
     ref.current.material.opacity = 0.3 + Math.sin(state.clock.elapsedTime * speed) * 0.12
     ref.current.rotation.z = state.clock.elapsedTime * speed * 0.04
   })
+  if (!glow) return null
   return (
     <sprite ref={ref} position={position} scale={scale}>
       <spriteMaterial
-        map={GLOW}
+        map={glow}
         transparent
         opacity={0.35}
         blending={THREE.AdditiveBlending}
@@ -56,8 +73,8 @@ function Planet() {
   const body = useRef()
   const ring = useRef()
   useFrame((state, delta) => {
-    body.current.rotation.y += delta * 0.07
-    ring.current.rotation.z = 0.42 + Math.sin(state.clock.elapsedTime * 0.2) * 0.04
+    if (body.current) body.current.rotation.y += delta * 0.07
+    if (ring.current) ring.current.rotation.z = 0.42 + Math.sin(state.clock.elapsedTime * 0.2) * 0.04
   })
   return (
     <group position={[5.6, 1.4, -6]}>
@@ -91,6 +108,7 @@ function Planet() {
 function Moon({ dist, speed, size }) {
   const ref = useRef()
   useFrame((state) => {
+    if (!ref.current) return
     const t = state.clock.elapsedTime * speed
     ref.current.position.set(Math.cos(t) * dist, Math.sin(t * 0.7) * dist * 0.35, Math.sin(t) * dist)
   })
@@ -105,6 +123,7 @@ function Moon({ dist, speed, size }) {
 function DwarfPlanet() {
   const ref = useRef()
   useFrame((state, delta) => {
+    if (!ref.current) return
     ref.current.rotation.y += delta * 0.1
     ref.current.position.y = -1.6 + Math.sin(state.clock.elapsedTime * 0.3) * 0.25
   })
@@ -125,6 +144,7 @@ function DwarfPlanet() {
 function Asteroid({ position, scale, speed }) {
   const ref = useRef()
   useFrame((_, delta) => {
+    if (!ref.current) return
     ref.current.rotation.x += delta * speed
     ref.current.rotation.y += delta * speed * 0.8
   })
@@ -140,6 +160,7 @@ function ShootingStar() {
   const ref = useRef()
   const d = useRef({ t: 0, x: 10, y: 5 })
   useFrame((state, delta) => {
+    if (!ref.current) return
     d.current.t += delta
     if (d.current.t > 2.6) {
       d.current.t = 0
@@ -148,7 +169,7 @@ function ShootingStar() {
     }
     const prog = d.current.t / 2.6
     ref.current.position.set(d.current.x - prog * 17, d.current.y - prog * 6.5, 2.5)
-    ref.current.material.opacity = Math.sin(prog * Math.PI) * 0.9
+    if (ref.current.material) ref.current.material.opacity = Math.sin(prog * Math.PI) * 0.9
   })
   return (
     <mesh ref={ref} rotation={[0, 0, 0.35]}>
@@ -167,6 +188,7 @@ function ShootingStar() {
 function Debris({ position, geometry, color }) {
   const ref = useRef()
   useFrame((state, delta) => {
+    if (!ref.current) return
     ref.current.rotation.x += delta * 0.25
     ref.current.rotation.y += delta * 0.35
     ref.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 0.6 + position[0]) * 0.3
@@ -200,13 +222,17 @@ function CameraRig() {
 }
 
 export default function Scene3D() {
+  // reduce 3D on low-end / prefers-reduced-motion
+  const isLowEnd = typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)
+  const reduceMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   return (
     <SceneBoundary>
       <div className="scene3d" aria-hidden="true">
         <Canvas
           camera={{ position: [0, 0.4, 8.5], fov: 55 }}
-          dpr={[1, 1.75]}
-          gl={{ alpha: true, antialias: true }}
+          dpr={[1, reduceMotion ? 1 : isLowEnd ? 1.25 : 1.5]}
+          gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }}
+          frameloop={reduceMotion ? 'demand' : 'always'}
         >
           <fog attach="fog" args={['#0a0620', 10, 26]} />
           <ambientLight intensity={0.45} color="#a78bfa" />
@@ -227,13 +253,13 @@ export default function Scene3D() {
           <Asteroid position={[1.5, -2.6, -1.5]} scale={[0.3, 0.35, 0.3]} speed={0.8} />
           <Asteroid position={[-5.5, 1.5, -2]} scale={[0.35, 0.3, 0.4]} speed={0.45} />
           <ShootingStar />
-          <Debris position={[-4.2, 2.4, -3]} geometry={<torusKnotGeometry args={[0.55, 0.18, 64, 8]} />} color="#f472b6" />
+          <Debris position={[-4.2, 2.4, -3]} geometry={<torusKnotGeometry args={[0.55, 0.18, 32, 8]} />} color="#f472b6" />
           <Debris position={[3.8, 2.8, -4]} geometry={<octahedronGeometry args={[0.8]} />} color="#22d3ee" />
-          <Debris position={[-2.6, -1.2, -5]} geometry={<torusGeometry args={[0.7, 0.24, 16, 32]} />} color="#a3e635" />
+          <Debris position={[-2.6, -1.2, -5]} geometry={<torusGeometry args={[0.7, 0.24, 12, 24]} />} color="#a3e635" />
           <Debris position={[4.6, -1.4, -2.5]} geometry={<icosahedronGeometry args={[0.6]} />} color="#a78bfa" />
-          <Stars radius={90} depth={50} count={3000} factor={4} saturation={0} fade speed={1} />
-          <Stars radius={40} depth={30} count={800} factor={6} saturation={0.8} fade speed={0.6} />
-          <Sparkles count={80} scale={16} size={2} speed={0.4} color="#a78bfa" />
+          <Stars radius={90} depth={50} count={isLowEnd ? 1200 : 1800} factor={4} saturation={0} fade speed={reduceMotion ? 0 : 1} />
+          <Stars radius={40} depth={30} count={isLowEnd ? 300 : 400} factor={6} saturation={0.8} fade speed={reduceMotion ? 0 : 0.6} />
+          <Sparkles count={isLowEnd ? 30 : 40} scale={16} size={2} speed={reduceMotion ? 0 : 0.4} color="#a78bfa" />
         </Canvas>
       </div>
     </SceneBoundary>

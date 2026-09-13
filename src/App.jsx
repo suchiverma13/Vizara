@@ -11,6 +11,7 @@ import CodingScreen from './components/CodingScreen.jsx'
 import TopicBrief from './components/TopicBrief.jsx'
 import LoginScreen from './components/LoginScreen.jsx'
 import Profile from './components/Profile.jsx'
+import Leaderboard from './components/Leaderboard.jsx'
 import { levels } from './data/levels.js'
 import { getSession, logout } from './data/userStore.js'
 
@@ -32,12 +33,16 @@ export default function App() {
     if (activeIndex < levels.length - 1) setActiveId(levels[activeIndex + 1].id)
   }
 
+  const openLeaderboard = () => setView('leaderboard')
+
   return (
     <div className="app">
       <Scene3D />
       <div className="content">
         <Navbar
           onOpenCode={openCode}
+          onLeaderboard={openLeaderboard}
+          onHome={() => setView('home')}
           user={user}
           onLogin={() => setView('login')}
           onProfile={() => setView('profile')}
@@ -89,6 +94,16 @@ export default function App() {
             onBack={() => setView('home')}
             onStartPlaying={openCode}
             onLogout={() => { logout(); setUser(null); setView('home') }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {view === 'leaderboard' && (
+          <Leaderboard
+            user={user}
+            onBack={() => setView('home')}
+            onStartPlaying={openCode}
           />
         )}
       </AnimatePresence>

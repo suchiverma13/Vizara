@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { useEffect } from 'react'
 import { getStats, topicColors, tierFor } from '../data/userStore.js'
+import ProfileBuddy3D from './ProfileBuddy3D.jsx'
 
 function Donut({ data, total }) {
   const r = 48
@@ -98,6 +99,9 @@ export default function Profile({ user, onBack, onStartPlaying, onLogout }) {
         </div>
 
         <div className="profile-grid">
+          <div className="profile-card buddy-profile-card" style={{ gridColumn: '1 / -1', padding: 0, overflow: 'hidden' }}>
+            <ProfileBuddy3D stats={stats} tier={tier} user={user} />
+          </div>
           <div className="profile-card rating-card">
             <div className="card-title">Rating analyzer</div>
             <div className="rating-num" style={{ color: tier.color }}>{stats.rating}</div>

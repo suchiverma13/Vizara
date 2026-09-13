@@ -12,6 +12,14 @@ import {
   dailyForLevel,
 } from '../data/questions.js'
 import { recordAttempt } from '../data/userStore.js'
+import {
+  LANGUAGES,
+  getStarter,
+  getFileName,
+  getLanguageLabel,
+  loadLanguage,
+  saveLanguage,
+} from '../data/codeTemplates.js'
 
 const SOLVED_KEY = 'vizara-solved'
 
@@ -38,6 +46,7 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
   const [topic, setTopic] = useState('All')
   const [difficulty, setDifficulty] = useState('All')
   const [day, setDay] = useState('Daily')
+  const [lang, setLang] = useState(() => loadLanguage())
   const [index, setIndex] = useState(() => {
     if (level) {
       const q = dailyForLevel(level)
@@ -46,7 +55,20 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
     const daily = dailyQuestion()
     return questions.findIndex((q) => q.id === daily.id)
   })
-  const [code, setCode] = useState(questions[index].starter)
+  const codeCache = useRef({})
+  const cacheKey = (qid, l) => `${qid}__${l}`
+  const getCached = (q, l) => codeCache.current[cacheKey(q.id, l)] || getStarter(q, l)
+  const [code, setCode] = useState(() => {
+    const initQ = (() => {
+      if (level) {
+        const q = dailyForLevel(level)
+        return questions.find((x) => x.id === q.id) || questions[0]
+      }
+      const daily = dailyQuestion()
+      return questions.find((q) => q.id === daily.id) || questions[0]
+    })()
+    return getCached(initQ, loadLanguage())
+  })
   const [runId, setRunId] = useState(0)
   const [activeLine, setActiveLine] = useState(-1)
   const [solved, setSolved] = useState(loadSolved)
@@ -54,6 +76,7 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
   const [chancesLeft, setChancesLeft] = useState(chancesFor(questions[index].difficulty))
   const [solutionUnlocked, setSolutionUnlocked] = useState(false)
   const [shuffling, setShuffling] = useState(false)
+  const [timerPaused, setTimerPaused] = useState(false)
   const shuffleTimer = useRef(null)
 
   const question = questions[index]
@@ -62,19 +85,39 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
   const timeUp = elapsed >= timeLimit
   const isSolved = solved.includes(question.id)
   const progress = Math.round((solved.length / questions.length) * 100)
+  const fileName = getFileName(question, lang)
 
   const loadAt = (i) => {
+    // save current code to cache before switching
+    codeCache.current[cacheKey(question.id, lang)] = code
     const q = questions[(i + questions.length) % questions.length]
     setIndex(questions.findIndex((x) => x.id === q.id))
-    setCode(q.starter)
+    setCode(getCached(q, lang))
     setRunId(0)
     setActiveLine(-1)
     setElapsed(0)
+    setTimerPaused(false)
     setChancesLeft(chancesFor(q.difficulty))
+  }
+
+  const handleLangChange = (newLang) => {
+    codeCache.current[cacheKey(question.id, lang)] = code
+    setLang(newLang)
+    saveLanguage(newLang)
+    setCode(getCached(question, newLang))
+    setRunId(0)
+    setActiveLine(-1)
+  }
+
+  const handleCodeChange = (v) => {
+    setCode(v)
+    codeCache.current[cacheKey(question.id, lang)] = v
   }
 
   const handleRun = () => {
     if (chancesLeft <= 0 || timeUp || shuffling) return
+    // resume timer if it was paused after acceptance (retry)
+    if (timerPaused) setTimerPaused(false)
     setSolutionUnlocked(true)
     setChancesLeft((c) => c - 1)
     setRunId((r) => r + 1)
@@ -96,9 +139,15 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
   }
 
   useEffect(() => {
-    const t = setInterval(() => setElapsed((e) => e + 1), 1000)
+    if (timerPaused) return
+    const t = setInterval(() => {
+      setElapsed((e) => {
+        if (e >= timeLimit) return e
+        return e + 1
+      })
+    }, 1000)
     return () => clearInterval(t)
-  }, [])
+  }, [timerPaused, timeLimit])
 
   useEffect(() => () => clearInterval(shuffleTimer.current), [])
 
@@ -201,9 +250,12 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
               <span className="timer-label">Limit</span>
               {fmtTime(timeLimit)}
             </span>
-            <span className={`timer-chip taken ${timeUp ? 'over' : ''}`}>
-              <span className="timer-label">Taken</span>
-              {fmtTime(Math.min(elapsed, timeLimit))}
+            <span
+              className={`timer-chip taken ${timeUp ? 'over' : timerPaused ? 'paused' : ''}`}
+              style={timerPaused ? { borderColor: 'rgba(52,211,153,0.45)', color: '#34d399', background: 'rgba(52,211,153,0.12)' } : undefined}
+            >
+              <span className="timer-label">{timerPaused ? 'Paused' : 'Taken'}</span>
+              {fmtTime(Math.min(elapsed, timeLimit))} {timerPaused && '⏸'}
             </span>
             <span className={`timer-chip ${chancesLeft <= 1 ? 'low' : ''}`}>
               <span className="timer-label">Chances</span>
@@ -232,6 +284,26 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
       </div>
 
       <div className="code-filters">
+        <div className="filter-block">
+          <span className="filter-label">Language</span>
+          <div className="filter-group">
+            {LANGUAGES.map((l) => (
+              <button
+                key={l.id}
+                className={`filter-btn ${lang === l.id ? 'active' : ''}`}
+                onClick={() => handleLangChange(l.id)}
+                title={l.label}
+                style={
+                  lang === l.id
+                    ? { background: `${l.color}22`, borderColor: `${l.color}66`, color: l.color }
+                    : undefined
+                }
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="filter-block">
           <span className="filter-label">Topic</span>
           <div className="filter-group">
@@ -289,9 +361,13 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
         <motion.button
           className="ctrl-btn"
           onClick={() => {
-            setCode(question.starter)
+            const starter = getStarter(question, lang)
+            codeCache.current[cacheKey(question.id, lang)] = starter
+            setCode(starter)
             setRunId(0)
             setActiveLine(-1)
+            // retrying — resume timer if it was paused on accepted
+            if (timerPaused) setTimerPaused(false)
           }}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.93 }}
@@ -321,37 +397,41 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
 
       <div className="code-grid">
         <div className="code-editor-col">
-          <div className="code-label">solution.js</div>
+          <div className="code-label">{fileName}</div>
           <div className="editor-frame">
             <CodeEditor
               value={code}
-              onChange={setCode}
+              onChange={handleCodeChange}
               onRun={handleRun}
               activeLine={activeLine}
+              language={lang}
             />
             <div className="editor-statusbar">
-              <span>JavaScript</span>
+              <span>{getLanguageLabel(lang)}</span>
               <span>{code.split('\n').length} lines · {code.length} chars</span>
               <span>Ctrl+Enter to run</span>
             </div>
           </div>
         </div>
         <CodeVisualizer
-          key={runId}
+          key={`${question.id}-${lang}-${runId}`}
           code={code}
           question={question}
+          language={lang}
           runId={runId}
           solutionUnlocked={solutionUnlocked}
           onRerun={handleRun}
           onActiveLine={setActiveLine}
           onVerdict={(passed, total) => {
+            const isWin = passed / total >= 0.75
+            if (isWin) setTimerPaused(true)
             markSolved(question.id)
             recordAttempt({
               qid: question.id,
               title: question.title,
               topic: question.topic,
               difficulty: question.difficulty,
-              passed: passed / total >= 0.75,
+              passed: isWin,
               timeTaken: elapsed,
             })
           }}

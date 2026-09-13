@@ -1,13 +1,16 @@
 import { motion } from 'framer-motion'
 import { useState } from 'react'
 
-const links = ['Levels', 'Arena', 'Leaderboard', 'Docs']
-
-export default function Navbar({ onOpenCode, user, onLogin, onProfile }) {
+export default function Navbar({ onOpenCode, onLeaderboard, onHome, user, onLogin, onProfile }) {
   const [open, setOpen] = useState(false)
   const initials = user
     ? user.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()
     : ''
+
+  const scrollTo = (id) => {
+    onHome?.()
+    setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }), 80)
+  }
 
   return (
     <motion.header
@@ -21,24 +24,54 @@ export default function Navbar({ onOpenCode, user, onLogin, onProfile }) {
           className="brand"
           whileHover={{ scale: 1.05 }}
           transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+          onClick={onHome}
+          style={{ cursor: 'pointer' }}
         >
           <span className="brand-mark">{'{ }'}</span>
           <span className="brand-name">Vizara</span>
         </motion.div>
 
         <nav className={`nav-links ${open ? 'open' : ''}`}>
-          {links.map((l, i) => (
-            <motion.a
-              key={l}
-              href={`#${l.toLowerCase()}`}
-              initial={{ opacity: 0, y: -12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 + i * 0.08 }}
-              whileHover={{ scale: 1.06 }}
-            >
-              {l}
-            </motion.a>
-          ))}
+          <motion.button
+            className="nav-link-btn"
+            onClick={() => scrollTo('levels')}
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            whileHover={{ scale: 1.06 }}
+          >
+            Levels
+          </motion.button>
+          <motion.button
+            className="nav-link-btn"
+            onClick={() => scrollTo('levels')}
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.23 }}
+            whileHover={{ scale: 1.06 }}
+          >
+            Arena
+          </motion.button>
+          <motion.button
+            className="nav-link-btn active"
+            onClick={onLeaderboard}
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.31 }}
+            whileHover={{ scale: 1.06 }}
+          >
+            Leaderboard
+          </motion.button>
+          <motion.a
+            href="#"
+            onClick={(e) => e.preventDefault()}
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.39 }}
+            whileHover={{ scale: 1.06 }}
+          >
+            Docs
+          </motion.a>
           <motion.button
             className="nav-code-btn"
             onClick={onOpenCode}
