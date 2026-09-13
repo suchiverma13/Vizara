@@ -76,7 +76,7 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
   const [chancesLeft, setChancesLeft] = useState(chancesFor(questions[index].difficulty))
   const [solutionUnlocked, setSolutionUnlocked] = useState(false)
   const [shuffling, setShuffling] = useState(false)
-  const [timerPaused, setTimerPaused] = useState(false)
+  const [timerPaused, setTimerPaused] = useState(true) // paused until user starts typing
   const shuffleTimer = useRef(null)
 
   const question = questions[index]
@@ -96,7 +96,7 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
     setRunId(0)
     setActiveLine(-1)
     setElapsed(0)
-    setTimerPaused(false)
+    setTimerPaused(true) // wait for typing on new question
     setChancesLeft(chancesFor(q.difficulty))
   }
 
@@ -112,6 +112,8 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
   const handleCodeChange = (v) => {
     setCode(v)
     codeCache.current[cacheKey(question.id, lang)] = v
+    // start timer on first typing
+    if (timerPaused && !timeUp) setTimerPaused(false)
   }
 
   const handleRun = () => {
@@ -250,13 +252,25 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
               <span className="timer-label">Limit</span>
               {fmtTime(timeLimit)}
             </span>
-            <span
-              className={`timer-chip taken ${timeUp ? 'over' : timerPaused ? 'paused' : ''}`}
-              style={timerPaused ? { borderColor: 'rgba(52,211,153,0.45)', color: '#34d399', background: 'rgba(52,211,153,0.12)' } : undefined}
-            >
-              <span className="timer-label">{timerPaused ? 'Paused' : 'Taken'}</span>
-              {fmtTime(Math.min(elapsed, timeLimit))} {timerPaused && '⏸'}
-            </span>
+            {(() => {
+              const notStarted = timerPaused && elapsed === 0
+              return (
+                <span
+                  className={`timer-chip taken ${timeUp ? 'over' : timerPaused ? (notStarted ? 'ready' : 'paused') : ''}`}
+                  style={
+                    timerPaused
+                      ? notStarted
+                        ? { borderColor: 'rgba(148,163,184,0.32)', color: '#94a3b8', background: 'rgba(148,163,184,0.08)' }
+                        : { borderColor: 'rgba(52,211,153,0.45)', color: '#34d399', background: 'rgba(52,211,153,0.12)' }
+                      : undefined
+                  }
+                  title={notStarted ? 'Timer starts on first keystroke' : timerPaused ? 'Paused after accept — type to resume' : 'Timer running'}
+                >
+                  <span className="timer-label">{notStarted ? 'Ready' : timerPaused ? 'Paused' : 'Taken'}</span>
+                  {fmtTime(Math.min(elapsed, timeLimit))} {timerPaused ? (notStarted ? '· type to start' : '⏸') : ''}
+                </span>
+              )
+            })()}
             <span className={`timer-chip ${chancesLeft <= 1 ? 'low' : ''}`}>
               <span className="timer-label">Chances</span>
               {'●'.repeat(chancesLeft)}
@@ -366,8 +380,8 @@ export default function CodingScreen({ onBack, level = null, onResults }) {
             setCode(starter)
             setRunId(0)
             setActiveLine(-1)
-            // retrying — resume timer if it was paused on accepted
-            if (timerPaused) setTimerPaused(false)
+            setElapsed(0)
+            setTimerPaused(true) // wait for typing
           }}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.93 }}
