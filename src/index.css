@@ -3171,6 +3171,12 @@ body {
   backdrop-filter: blur(8px);
 }
 
+.buddy-card.girl {
+  background: linear-gradient(135deg, rgba(255, 64, 129, 0.13), rgba(255, 138, 101, 0.1) 50%, rgba(255, 213, 79, 0.08));
+  border-color: rgba(255, 138, 101, 0.22);
+  box-shadow: 0 0 0 1px rgba(255, 138, 101, 0.08), 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
 .buddy-header {
   display: flex;
   align-items: baseline;
@@ -3208,6 +3214,14 @@ body {
   border-radius: 0 0 14px 14px;
   overflow: hidden;
   isolation: isolate;
+}
+
+.girl-wrap {
+  background:
+    radial-gradient(420px 220px at 50% 22%, rgba(255, 138, 101, 0.24), transparent 72%),
+    radial-gradient(360px 200px at 18% 85%, rgba(255, 213, 79, 0.14), transparent 72%),
+    radial-gradient(300px 180px at 85% 30%, rgba(255, 64, 129, 0.12), transparent 72%),
+    linear-gradient(180deg, rgba(255, 243, 224, 0.06), transparent);
 }
 
 .buddy-canvas-wrap canvas {
