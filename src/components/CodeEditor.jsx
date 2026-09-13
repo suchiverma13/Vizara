@@ -14,18 +14,35 @@ const KW = {
 }
 
 export function highlightLine(line, language = 'javascript') {
+  if (line === '') return ''
   const strings = []
+  const comments = []
   let out = escapeHtml(line)
+  // 1. strings -> placeholder private use U+E000 + idx (single char, not matched by later regex)
   out = out.replace(/("[^"\n]*"|'[^'\n]*'|`[^`\n]*`)/g, (m) => {
+    const ph = String.fromCharCode(0xe000 + strings.length)
     strings.push(m)
-    return `\u0000${strings.length - 1}\u0000`
+    return ph
   })
+  // 2. comments -> placeholder U+E100 + idx
   if (language === 'python') {
-    out = out.replace(/(#.*$)/g, (m) => `<span class="tok-cm">${m}</span>`)
+    out = out.replace(/(#.*$)/g, (m) => {
+      const ph = String.fromCharCode(0xe100 + comments.length)
+      comments.push(m)
+      return ph
+    })
   } else if (language === 'cpp' || language === 'java' || language === 'go') {
-    out = out.replace(/(\/\/.*$)/g, (m) => `<span class="tok-cm">${m}</span>`)
+    out = out.replace(/(\/\/.*$)/g, (m) => {
+      const ph = String.fromCharCode(0xe100 + comments.length)
+      comments.push(m)
+      return ph
+    })
   } else {
-    out = out.replace(/(\/\/.*$|#.*$)/g, (m) => `<span class="tok-cm">${m}</span>`)
+    out = out.replace(/(\/\/.*$|#.*$)/g, (m) => {
+      const ph = String.fromCharCode(0xe100 + comments.length)
+      comments.push(m)
+      return ph
+    })
   }
   const kwRegex = KW[language] || KW.javascript
   kwRegex.lastIndex = 0
@@ -35,7 +52,17 @@ export function highlightLine(line, language = 'javascript') {
     /\b([A-Za-z_$][\w$]*)(?=\s*\()/g,
     (m) => `<span class="tok-fn">${m}</span>`
   )
-  out = out.replace(/\u0000(\d+)\u0000/g, (_, i) => `<span class="tok-st">${strings[i]}</span>`)
+  // restore strings and comments (private use chars)
+  out = out.replace(/[\ue000-\ue0ff]/g, (ch) => {
+    const idx = ch.charCodeAt(0) - 0xe000
+    if (idx >= 0 && idx < strings.length) return `<span class="tok-st">${strings[idx]}</span>`
+    return ch
+  })
+  out = out.replace(/[\ue100-\ue1ff]/g, (ch) => {
+    const idx = ch.charCodeAt(0) - 0xe100
+    if (idx >= 0 && idx < comments.length) return `<span class="tok-cm">${comments[idx]}</span>`
+    return ch
+  })
   return out
 }
 
@@ -50,15 +77,30 @@ export default function CodeEditor({ value, onChange, onRun, activeLine, languag
     const pre = preRef.current
     const gutter = gutterRef.current
     if (!ta || !pre) return
+    // sync highlight and gutter with textarea scroll
     pre.scrollTop = ta.scrollTop
     pre.scrollLeft = ta.scrollLeft
     if (gutter) gutter.scrollTop = ta.scrollTop
   }, [])
 
+  // keep scroll in sync after value changes (e.g., reset, tab)
   useEffect(() => {
-    // keep highlight in sync after value changes (e.g., programmatic)
     syncScroll()
   }, [value, syncScroll])
+
+  // ensure textarea and highlight have identical metrics on mount
+  useEffect(() => {
+    const ta = taRef.current
+    const pre = preRef.current
+    if (ta && pre) {
+      // force same font metrics
+      const cs = getComputedStyle(ta)
+      pre.style.fontFamily = cs.fontFamily
+      pre.style.fontSize = cs.fontSize
+      pre.style.lineHeight = cs.lineHeight
+      pre.style.letterSpacing = cs.letterSpacing
+    }
+  }, [])
 
   const handleKey = (e) => {
     if (e.key === 'Tab') {
@@ -67,19 +109,36 @@ export default function CodeEditor({ value, onChange, onRun, activeLine, languag
       if (!ta) return
       const start = ta.selectionStart
       const end = ta.selectionEnd
-      const before = ta.value.slice(0, start)
-      const after = ta.value.slice(end)
       const insert = '  '
-      const next = before + insert + after
-      // update value via onChange
-      onChange(next)
-      // restore cursor after React updates
-      requestAnimationFrame(() => {
-        if (!taRef.current) return
-        taRef.current.selectionStart = taRef.current.selectionEnd = start + insert.length
-        taRef.current.focus()
-        syncScroll()
-      })
+      // For selected text, indent each line
+      if (start !== end) {
+        const before = ta.value.slice(0, start)
+        const selected = ta.value.slice(start, end)
+        const after = ta.value.slice(end)
+        const linesSel = selected.split('\n')
+        const indented = linesSel.map((l) => insert + l).join('\n')
+        const next = before + indented + after
+        onChange(next)
+        requestAnimationFrame(() => {
+          if (!taRef.current) return
+          taRef.current.selectionStart = start + insert.length
+          taRef.current.selectionEnd = end + insert.length * linesSel.length
+          taRef.current.focus()
+          syncScroll()
+        })
+      } else {
+        const before = ta.value.slice(0, start)
+        const after = ta.value.slice(start)
+        const next = before + insert + after
+        onChange(next)
+        requestAnimationFrame(() => {
+          if (!taRef.current) return
+          const pos = start + insert.length
+          taRef.current.selectionStart = taRef.current.selectionEnd = pos
+          taRef.current.focus()
+          syncScroll()
+        })
+      }
     }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
@@ -87,13 +146,31 @@ export default function CodeEditor({ value, onChange, onRun, activeLine, languag
     }
   }
 
-  const focusEditor = () => taRef.current?.focus()
+  const focusEditor = () => {
+    taRef.current?.focus()
+  }
+
+  // also handle click on gutter to focus and set cursor
+  const handleGutterClick = (idx) => {
+    const ta = taRef.current
+    if (!ta) return
+    const linesUpTo = value.split('\n').slice(0, idx).join('\n').length + (idx > 0 ? 1 : 0)
+    ta.focus()
+    ta.setSelectionRange(linesUpTo, linesUpTo)
+  }
 
   return (
     <div className="editor-wrap" onClick={focusEditor}>
-      <div ref={gutterRef} className="editor-gutter" aria-hidden="true">
+      <div ref={gutterRef} className="editor-gutter" aria-hidden="true" onClick={focusEditor}>
         {lines.map((_, i) => (
-          <div key={i} className={`gutter-line ${i === activeLine ? 'active' : ''}`}>
+          <div
+            key={i}
+            className={`gutter-line ${i === activeLine ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              handleGutterClick(i)
+            }}
+          >
             {i + 1}
           </div>
         ))}
@@ -104,7 +181,7 @@ export default function CodeEditor({ value, onChange, onRun, activeLine, languag
             <div
               key={i}
               className={`hl-line ${i === activeLine ? 'active' : ''}`}
-              dangerouslySetInnerHTML={{ __html: highlightLine(l, language) || ' ' }}
+              dangerouslySetInnerHTML={{ __html: highlightLine(l, language) || '<span style="opacity:0">·</span>' }}
             />
           ))}
         </pre>
@@ -115,6 +192,9 @@ export default function CodeEditor({ value, onChange, onRun, activeLine, languag
           onChange={(e) => onChange(e.target.value)}
           onScroll={syncScroll}
           onKeyDown={handleKey}
+          onSelect={syncScroll}
+          onClick={syncScroll}
+          onInput={syncScroll}
           spellCheck={false}
           autoComplete="off"
           autoCorrect="off"
@@ -122,7 +202,7 @@ export default function CodeEditor({ value, onChange, onRun, activeLine, languag
           wrap="off"
           autoFocus
           aria-label="Code editor"
-          placeholder="// start typing..."
+          placeholder="// start typing your solution..."
         />
       </div>
     </div>

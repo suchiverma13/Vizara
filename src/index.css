@@ -1284,15 +1284,20 @@ body {
   letter-spacing: 0;
   word-wrap: normal;
   overflow-wrap: normal;
+  font-variant-ligatures: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 .hl-line {
   min-height: 1.75em;
   line-height: 1.75;
   white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
   padding: 0;
+  margin: 0;
   border-left: 2px solid transparent;
-  margin: 0 -2px;
+  font-variant-ligatures: none;
 }
 
 .hl-line.active {
@@ -1312,7 +1317,8 @@ body {
   color: transparent;
   caret-color: #22d3ee;
   padding: 14px 16px;
-  font: inherit;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
   line-height: 1.75;
   letter-spacing: 0;
   white-space: pre;
@@ -1320,6 +1326,9 @@ body {
   tab-size: 2;
   word-wrap: normal;
   overflow-wrap: normal;
+  word-break: normal;
+  font-variant-ligatures: none;
+  -webkit-font-smoothing: antialiased;
   scrollbar-width: thin;
   scrollbar-color: rgba(124, 58, 237, 0.35) transparent;
 }
