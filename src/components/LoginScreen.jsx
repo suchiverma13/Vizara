@@ -93,13 +93,13 @@ export default function LoginScreen({ onDone, onBack }) {
     if (msg) setInfo(msg)
   }
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     if (busy) return
     setError(null)
     setInfo(null)
     if (mode === 'forgot') {
-      const res = requestPasswordReset(email)
+      const res = await requestPasswordReset(email)
       if (res.error) {
         setError(res.error)
         setLogLines((l) => [...l, `✕ reset denied · ${res.error}`])
@@ -120,7 +120,7 @@ export default function LoginScreen({ onDone, onBack }) {
         setLogLines((l) => [...l, '✕ reset denied · passwords mismatch'])
         return
       }
-      const res = resetPassword(email, resetToken, newPass)
+      const res = await resetPassword(email, resetToken, newPass)
       if (res.error) {
         setError(res.error)
         setLogLines((l) => [...l, `✕ reset denied · ${res.error}`])
@@ -131,7 +131,7 @@ export default function LoginScreen({ onDone, onBack }) {
       setTimeout(() => setPhase('done'), 900)
       return
     }
-    const res = mode === 'login' ? login(email, password) : register(name, email, password)
+    const res = mode === 'login' ? await login(email, password) : await register(name, email, password)
     if (res.error) {
       setError(res.error)
       setLogLines((l) => [...l, `✕ access denied · ${res.error}`])

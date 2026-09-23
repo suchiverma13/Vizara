@@ -112,7 +112,9 @@ export default function Hero({ onStart, user }) {
           <p className="out ok">
             <span className="ok">✓</span> All 512 tests passed · O(n²) → O(n) suggested
           </p>
-          <p className="blink-cursor" />
+          <p className="prompt-line">
+            <span className="prompt">$</span> <span className="blink-cursor" aria-hidden="true" />
+          </p>
         </div>
       </motion.div>
     </section>

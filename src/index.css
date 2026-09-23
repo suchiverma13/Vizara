@@ -405,15 +405,27 @@ body {
 
 .blink-cursor {
   display: inline-block;
-  width: 9px;
-  height: 18px;
+  width: 8px;
+  height: 1.2em;
   background: var(--cyan);
   animation: blink 1s steps(1) infinite;
-  vertical-align: middle;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+  margin-bottom: -1px;
+  border-radius: 1px;
+  /* behave like a real caret – not selectable, not wrapping */
+  pointer-events: none;
+  user-select: none;
 }
 
 @keyframes blink {
-  50% { opacity: 0; }
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+/* when motion controls opacity, disable CSS blink to avoid double-blink */
+.blink-cursor.motion {
+  animation: none;
 }
 
 /* ---------- Stats ---------- */
@@ -1233,7 +1245,7 @@ body {
   color: var(--muted);
 }
 
-/* editor */
+/* editor — caret/highlight perfectly synced (fix: no layout shift cursor) */
 .editor-wrap {
   display: flex;
   height: 100%;
@@ -1241,6 +1253,9 @@ body {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.9rem;
   line-height: 1.75;
+  font-weight: 400;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
 .editor-gutter {
@@ -1252,12 +1267,16 @@ body {
   color: #3f3a6b;
   user-select: none;
   overflow: hidden;
+  line-height: 1.75;
+  font-variant-ligatures: none;
 }
 
 .gutter-line {
   padding: 0 12px;
   height: 1.75em;
+  line-height: 1.75;
   white-space: pre;
+  font-variant-ligatures: none;
 }
 
 .gutter-line.active {
@@ -1269,6 +1288,8 @@ body {
   position: relative;
   flex: 1;
   overflow: hidden;
+  /* isolate caret layer from transforms */
+  isolation: isolate;
 }
 
 .editor-highlight {
@@ -1282,27 +1303,41 @@ body {
   tab-size: 2;
   line-height: 1.75;
   letter-spacing: 0;
+  word-spacing: normal;
   word-wrap: normal;
   overflow-wrap: normal;
+  word-break: normal;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+  font-weight: 400;
+  font-style: normal;
+  text-transform: none;
   font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .hl-line {
   min-height: 1.75em;
+  height: 1.75em;
   line-height: 1.75;
   white-space: pre;
   word-wrap: normal;
   overflow-wrap: normal;
+  word-break: normal;
   padding: 0;
   margin: 0;
-  border-left: 2px solid transparent;
+  /* use inset shadow instead of border-left to avoid 2px layout shift that misaligned caret */
+  box-shadow: inset 2px 0 0 transparent;
   font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
 .hl-line.active {
   background: rgba(124, 58, 237, 0.14);
-  border-left-color: #a78bfa;
+  box-shadow: inset 2px 0 0 #a78bfa;
 }
 
 .editor-input {
@@ -1321,16 +1356,25 @@ body {
   font-size: 0.9rem;
   line-height: 1.75;
   letter-spacing: 0;
+  word-spacing: normal;
   white-space: pre;
   overflow: auto;
   tab-size: 2;
   word-wrap: normal;
   overflow-wrap: normal;
   word-break: normal;
+  font-weight: 400;
+  font-style: normal;
+  text-transform: none;
   font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   scrollbar-width: thin;
   scrollbar-color: rgba(124, 58, 237, 0.35) transparent;
+  /* prevent scrollbar-gutter shift between highlight/textarea */
+  scrollbar-gutter: stable;
 }
 
 .editor-input::selection {
@@ -1350,23 +1394,12 @@ body {
   outline-offset: -1px;
 }
 
-.editor-gutter {
-  width: 52px;
-  flex-shrink: 0;
-  border-right: 1px solid var(--border);
-  padding: 14px 0;
-  text-align: right;
-  color: #3f3a6b;
-  user-select: none;
-  overflow: hidden;
-  line-height: 1.75;
-}
-
 .tok-kw { color: #a78bfa; }
 .tok-st { color: #fbbf24; }
 .tok-num { color: #93c5fd; }
 .tok-fn { color: #f9a8d4; }
-.tok-cm { color: #55608c; font-style: italic; }
+/* remove italic – italic glyphs have different advance width and cause caret to appear between chars */
+.tok-cm { color: #55608c; font-style: normal; opacity: 0.95; }
 
 /* visualizer panel */
 .viz-panel {

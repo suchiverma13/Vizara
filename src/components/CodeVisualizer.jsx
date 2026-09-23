@@ -550,7 +550,9 @@ export default function CodeVisualizer({ code, question, language = 'javascript'
                       {s.log}
                     </motion.p>
                   ))}
-                  <span className="blink-cursor" />
+                  <p className="viz-log" style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+                    <span className="blink-cursor" aria-hidden="true" />
+                  </p>
                 </>
               )}
               {phase === 'verdict' && (

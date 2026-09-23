@@ -1,9 +1,12 @@
 const USERS_KEY = 'vizara-users'
 const SESSION_KEY = 'vizara-session'
+const TOKEN_KEY = 'vizara-token'
+const CACHED_USER_KEY = 'vizara-cached-user'
+const LAST_EMAIL_KEY = 'vizara-last-reset-email'
 
 const todayKey = () => new Date().toISOString().slice(0, 10)
 
-// Hardened hash: djb2 with salt + 3 rounds (client-side only — replace with bcrypt/argon2 on backend for production)
+// legacy client hash (kept for offline fallback only)
 const hash = (s, salt = 'vizara-v2') => {
   const str = salt + s + salt
   let h = 5381
@@ -35,6 +38,19 @@ const save = (key, v) => {
   try { localStorage.setItem(key, JSON.stringify(v)) } catch {}
 }
 
+const loadStr = (key) => {
+  if (!isBrowser) return null
+  try { return localStorage.getItem(key) } catch { return null }
+}
+const saveStr = (key, v) => {
+  if (!isBrowser) return
+  try { localStorage.setItem(key, v) } catch {}
+}
+const removeKey = (key) => {
+  if (!isBrowser) return
+  try { localStorage.removeItem(key) } catch {}
+}
+
 export const attemptKey = (uid) => `vizara-attempts-${uid}`
 
 const oldHash = (s) => {
@@ -43,7 +59,25 @@ const oldHash = (s) => {
   return h.toString(36)
 }
 
-export function register(name, email, password) {
+// ---------- Backend helpers ----------
+const getToken = () => loadStr(TOKEN_KEY)
+const setToken = (t) => (t ? saveStr(TOKEN_KEY, t) : removeKey(TOKEN_KEY))
+const getCachedUser = () => load(CACHED_USER_KEY, null)
+const setCachedUser = (u) => (u ? save(CACHED_USER_KEY, u) : removeKey(CACHED_USER_KEY))
+
+async function apiFetch(path, opts = {}) {
+  const token = getToken()
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  // include credentials to send httpOnly cookie
+  const res = await fetch(path, { ...opts, headers, credentials: 'include' })
+  let data = null
+  try { data = await res.json() } catch {}
+  return { res, data }
+}
+
+// fallback local implementations (offline)
+function registerLocal(name, email, password) {
   const users = load(USERS_KEY, [])
   const id = email.trim().toLowerCase()
   if (!name.trim()) return { error: 'Please enter your name.' }
@@ -63,97 +97,250 @@ export function register(name, email, password) {
   users.push(user)
   save(USERS_KEY, users)
   save(SESSION_KEY, id)
-  return { user }
+  setCachedUser({ id: user.id, name: user.name, email: user.email, rating: user.rating, joined: user.joined })
+  return { user: { id: user.id, name: user.name, email: user.email, rating: user.rating, joined: user.joined } }
 }
 
-export function login(email, password) {
+function loginLocal(email, password) {
   const users = load(USERS_KEY, [])
   const id = email.trim().toLowerCase()
   const user = users.find((u) => u.id === id)
   if (!user) return { error: 'Invalid email or password.' }
   const ok = user.pass === hash(password, id) || user.pass === oldHash(password) || user.pass === hash(password)
   if (!ok) return { error: 'Invalid email or password.' }
-  // migrate old hash
   if (user.pass === oldHash(password)) {
     user.pass = hash(password, id)
     save(USERS_KEY, users)
   }
   save(SESSION_KEY, id)
-  return { user }
+  const pub = { id: user.id, name: user.name, email: user.email, rating: user.rating, joined: user.joined }
+  setCachedUser(pub)
+  return { user: pub }
 }
 
-export function logout() {
+// ---------- Public async API (backend-first) ----------
+export async function register(name, email, password) {
+  // try backend first
+  try {
+    const { res, data } = await apiFetch('/api/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password }),
+    })
+    if (res.ok && data?.user) {
+      if (data.token) setToken(data.token)
+      setCachedUser(data.user)
+      save(SESSION_KEY, data.user.id)
+      // also keep local copy for offline fallback (optional)
+      try {
+        const users = load(USERS_KEY, [])
+        if (!users.some((u) => u.id === data.user.id)) {
+          users.push({ ...data.user, pass: hash(password, data.user.id) })
+          save(USERS_KEY, users)
+        }
+      } catch {}
+      return { user: data.user }
+    }
+    if (data?.error) {
+      // if backend says duplicate etc, return error directly
+      // if backend is unavailable (404) fallback to local
+      if (res.status === 404) throw new Error('no-backend')
+      return { error: data.error }
+    }
+    throw new Error('no-backend')
+  } catch (e) {
+    // fallback to local if backend unreachable (dev without vite middleware, or offline)
+    if (e?.message === 'no-backend' || e instanceof TypeError) {
+      // TypeError = fetch failed
+      return registerLocal(name, email, password)
+    }
+    // for other network errors, try local as well
+    try { return registerLocal(name, email, password) } catch { return { error: 'Failed to register. Please try again.' } }
+  }
+}
+
+export async function login(email, password) {
+  try {
+    const { res, data } = await apiFetch('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+    if (res.ok && data?.user) {
+      if (data.token) setToken(data.token)
+      setCachedUser(data.user)
+      save(SESSION_KEY, data.user.id)
+      try {
+        const users = load(USERS_KEY, [])
+        if (!users.some((u) => u.id === data.user.id)) {
+          users.push({ ...data.user, pass: hash(password, data.user.id) })
+          save(USERS_KEY, users)
+        }
+      } catch {}
+      return { user: data.user }
+    }
+    if (data?.error) {
+      if (res.status === 404) throw new Error('no-backend')
+      return { error: data.error }
+    }
+    throw new Error('no-backend')
+  } catch (e) {
+    if (e?.message === 'no-backend' || e instanceof TypeError) {
+      return loginLocal(email, password)
+    }
+    try { return loginLocal(email, password) } catch { return { error: 'Invalid email or password.' } }
+  }
+}
+
+export async function logout() {
+  try {
+    await apiFetch('/api/logout', { method: 'POST' })
+  } catch {}
+  removeKey(TOKEN_KEY)
+  removeKey(CACHED_USER_KEY)
   if (!isBrowser) return
   try { localStorage.removeItem(SESSION_KEY) } catch {}
 }
 
 export function getSession() {
+  // sync cached session for initial render; prefers backend cached user, fallback to local
+  const cached = getCachedUser()
+  if (cached) return cached
+  const token = getToken()
+  // if we have token but no cached user, try to return local session as fallback (will be revalidated async)
   const id = load(SESSION_KEY, null)
   if (!id) return null
   const users = load(USERS_KEY, [])
-  return users.find((u) => u.id === id) || null
+  const local = users.find((u) => u.id === id) || null
+  if (local) {
+    const pub = { id: local.id, name: local.name, email: local.email, rating: local.rating, joined: local.joined }
+    return pub
+  }
+  // if token exists but no local user, return null initially (will fetch)
+  if (token) return null
+  return null
 }
 
-// ---------- Password Reset (forgot / reset) ----------
-const RESETS_KEY = 'vizara-resets'
-const LAST_EMAIL_KEY = 'vizara-last-reset-email'
+export async function fetchSession() {
+  const token = getToken()
+  if (!token) {
+    // no token, fallback to sync local session
+    return getSession()
+  }
+  try {
+    const { res, data } = await apiFetch('/api/me', { method: 'GET' })
+    if (res.ok && data?.user) {
+      setCachedUser(data.user)
+      save(SESSION_KEY, data.user.id)
+      return data.user
+    }
+    // token invalid/expired
+    if (res.status === 401) {
+      removeKey(TOKEN_KEY)
+      removeKey(CACHED_USER_KEY)
+      return null
+    }
+    throw new Error('no-backend')
+  } catch (e) {
+    // fallback to cached/local
+    const cached = getCachedUser()
+    if (cached) return cached
+    return getSession()
+  }
+}
 
-export function requestPasswordReset(email) {
+// ---------- Password Reset ----------
+const RESETS_KEY = 'vizara-resets'
+
+export async function requestPasswordReset(email) {
   const id = email.trim().toLowerCase()
   if (!/^\S+@\S+\.\S+$/.test(id)) return { error: 'Please enter a valid email.' }
-  const users = load(USERS_KEY, [])
-  const user = users.find((u) => u.id === id)
-  if (!user) return { error: 'No account found with this email.' }
-  const token = Math.random().toString(36).slice(2, 6).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase()
-  const expires = Date.now() + 15 * 60 * 1000 // 15 min
-  const resets = load(RESETS_KEY, {})
-  resets[id] = { token, expires }
-  save(RESETS_KEY, resets)
-  const emailRecord = { to: id, token, expires, sentAt: new Date().toISOString(), name: user.name }
-  save(LAST_EMAIL_KEY, emailRecord)
-  // In production, call backend to send real email:
-  // fetch('/api/send-reset-email', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email: id, token, name: user.name }) })
-  // try/catch — if fetch fails, fallback to mock (above already saved). We fire-and-forget:
   try {
-    if (typeof fetch !== 'undefined') {
-      fetch('/api/send-reset-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: id, token, name: user.name }),
-      }).catch(() => {})
+    const { res, data } = await apiFetch('/api/request-reset', {
+      method: 'POST',
+      body: JSON.stringify({ email: id }),
+    })
+    if (res.ok && data?.token) {
+      const rec = { to: id, token: data.token, expires: data.expires, sentAt: new Date().toISOString() }
+      save(LAST_EMAIL_KEY, rec)
+      return { token: data.token, email: id }
     }
-  } catch {}
-  return { token, email: id }
+    if (data?.error) {
+      if (res.status === 404) throw new Error('no-backend')
+      return { error: data.error }
+    }
+    throw new Error('no-backend')
+  } catch (e) {
+    // fallback local
+    if (e?.message === 'no-backend' || e instanceof TypeError) {
+      const users = load(USERS_KEY, [])
+      const user = users.find((u) => u.id === id)
+      if (!user) return { error: 'No account found with this email.' }
+      const token = Math.random().toString(36).slice(2, 6).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase()
+      const expires = Date.now() + 15 * 60 * 1000
+      const resets = load(RESETS_KEY, {})
+      resets[id] = { token, expires }
+      save(RESETS_KEY, resets)
+      const emailRecord = { to: id, token, expires, sentAt: new Date().toISOString(), name: user.name }
+      save(LAST_EMAIL_KEY, emailRecord)
+      try { fetch('/api/send-reset-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: id, token, name: user.name }) }).catch(() => {}) } catch {}
+      return { token, email: id }
+    }
+    return { error: 'Failed to request reset.' }
+  }
 }
 
 export function getLastResetEmail() {
   return load(LAST_EMAIL_KEY, null)
 }
 
-export function resetPassword(email, token, newPassword) {
+export async function resetPassword(email, token, newPassword) {
   const id = email.trim().toLowerCase()
   const t = (token || '').trim().toUpperCase()
   if (!/^\S+@\S+\.\S+$/.test(id)) return { error: 'Please enter a valid email.' }
   if (!t) return { error: 'Please enter the reset code.' }
   if (newPassword.length < 6) return { error: 'Password must be at least 6 characters.' }
   if (!/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) return { error: 'Password needs letters & numbers.' }
-  const resets = load(RESETS_KEY, {})
-  const rec = resets[id]
-  if (!rec || rec.token !== t) return { error: 'Invalid reset code. Check your email.' }
-  if (Date.now() > rec.expires) {
-    delete resets[id]
-    save(RESETS_KEY, resets)
-    return { error: 'Reset code expired. Please request a new one.' }
+  try {
+    const { res, data } = await apiFetch('/api/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email: id, token: t, newPassword }),
+    })
+    if (res.ok && data?.user) {
+      if (data.token) setToken(data.token)
+      setCachedUser(data.user)
+      save(SESSION_KEY, data.user.id)
+      return { user: data.user }
+    }
+    if (data?.error) {
+      if (res.status === 404) throw new Error('no-backend')
+      return { error: data.error }
+    }
+    throw new Error('no-backend')
+  } catch (e) {
+    if (e?.message === 'no-backend' || e instanceof TypeError) {
+      const resets = load(RESETS_KEY, {})
+      const rec = resets[id]
+      if (!rec || rec.token !== t) return { error: 'Invalid reset code. Check your email.' }
+      if (Date.now() > rec.expires) {
+        delete resets[id]
+        save(RESETS_KEY, resets)
+        return { error: 'Reset code expired. Please request a new one.' }
+      }
+      const users = load(USERS_KEY, [])
+      const user = users.find((u) => u.id === id)
+      if (!user) return { error: 'No account found.' }
+      user.pass = hash(newPassword, id)
+      save(USERS_KEY, users)
+      delete resets[id]
+      save(RESETS_KEY, resets)
+      const pub = { id: user.id, name: user.name, email: user.email, rating: user.rating, joined: user.joined }
+      save(SESSION_KEY, id)
+      setCachedUser(pub)
+      // also set a token-like local marker so fetchSession thinks logged in offline
+      saveStr(TOKEN_KEY, 'local-' + id)
+      return { user: pub }
+    }
+    return { error: 'Failed to reset password.' }
   }
-  const users = load(USERS_KEY, [])
-  const user = users.find((u) => u.id === id)
-  if (!user) return { error: 'No account found.' }
-  user.pass = hash(newPassword, id)
-  save(USERS_KEY, users)
-  delete resets[id]
-  save(RESETS_KEY, resets)
-  save(SESSION_KEY, id)
-  return { user }
 }
 
 export function verifyResetToken(email, token) {

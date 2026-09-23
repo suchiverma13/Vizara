@@ -77,7 +77,7 @@ export default function CodeEditor({ value, onChange, onRun, activeLine, languag
     const pre = preRef.current
     const gutter = gutterRef.current
     if (!ta || !pre) return
-    // sync highlight and gutter with textarea scroll
+    // sync highlight and gutter with textarea scroll — both axes
     pre.scrollTop = ta.scrollTop
     pre.scrollLeft = ta.scrollLeft
     if (gutter) gutter.scrollTop = ta.scrollTop
@@ -88,18 +88,31 @@ export default function CodeEditor({ value, onChange, onRun, activeLine, languag
     syncScroll()
   }, [value, syncScroll])
 
-  // ensure textarea and highlight have identical metrics on mount
+  // ensure textarea and highlight have identical metrics on mount + on language/font load
   useEffect(() => {
     const ta = taRef.current
     const pre = preRef.current
-    if (ta && pre) {
-      // force same font metrics
+    if (!ta || !pre) return
+    const syncMetrics = () => {
       const cs = getComputedStyle(ta)
+      // copy all metrics that affect glyph placement so caret aligns with highlight
       pre.style.fontFamily = cs.fontFamily
       pre.style.fontSize = cs.fontSize
       pre.style.lineHeight = cs.lineHeight
       pre.style.letterSpacing = cs.letterSpacing
+      pre.style.wordSpacing = cs.wordSpacing
+      pre.style.fontWeight = cs.fontWeight
+      pre.style.tabSize = cs.tabSize
+      pre.style.padding = cs.padding
     }
+    syncMetrics()
+    // also after fonts load (JetBrains Mono may load late)
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(syncMetrics)
+    }
+    const ro = new ResizeObserver(syncMetrics)
+    ro.observe(ta)
+    return () => ro.disconnect()
   }, [])
 
   const handleKey = (e) => {
@@ -157,6 +170,17 @@ export default function CodeEditor({ value, onChange, onRun, activeLine, languag
     const linesUpTo = value.split('\n').slice(0, idx).join('\n').length + (idx > 0 ? 1 : 0)
     ta.focus()
     ta.setSelectionRange(linesUpTo, linesUpTo)
+    // ensure caret is visible and highlight follows
+    requestAnimationFrame(() => {
+      syncScroll()
+      // scroll caret into view if line is outside viewport
+      const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 21
+      const targetTop = idx * lineHeight
+      if (ta.scrollTop > targetTop || ta.scrollTop + ta.clientHeight < targetTop + lineHeight) {
+        ta.scrollTop = Math.max(0, targetTop - ta.clientHeight / 2)
+        syncScroll()
+      }
+    })
   }
 
   return (
@@ -192,9 +216,11 @@ export default function CodeEditor({ value, onChange, onRun, activeLine, languag
           onChange={(e) => onChange(e.target.value)}
           onScroll={syncScroll}
           onKeyDown={handleKey}
+          onKeyUp={syncScroll}
           onSelect={syncScroll}
           onClick={syncScroll}
           onInput={syncScroll}
+          onFocus={syncScroll}
           spellCheck={false}
           autoComplete="off"
           autoCorrect="off"

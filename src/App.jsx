@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import Scene3D from './components/Scene3D.jsx'
 import Navbar from './components/Navbar.jsx'
@@ -13,7 +13,7 @@ import LoginScreen from './components/LoginScreen.jsx'
 import Profile from './components/Profile.jsx'
 import Leaderboard from './components/Leaderboard.jsx'
 import { levels } from './data/levels.js'
-import { getSession, logout } from './data/userStore.js'
+import { getSession, fetchSession, logout } from './data/userStore.js'
 
 export default function App() {
   const [activeId, setActiveId] = useState(null)
@@ -21,6 +21,17 @@ export default function App() {
   const [briefLevelId, setBriefLevelId] = useState(null)
   const [view, setView] = useState('home')
   const [user, setUser] = useState(getSession)
+
+  useEffect(() => {
+    fetchSession().then((u) => {
+      if (u) setUser(u)
+      else {
+        // if token invalid, clear UI
+        const cached = getSession()
+        if (!cached) setUser(null)
+      }
+    })
+  }, [])
   const activeLevel = levels.find((l) => l.id === activeId) || null
   const activeIndex = levels.findIndex((l) => l.id === activeId)
 
@@ -81,7 +92,11 @@ export default function App() {
       <AnimatePresence>
         {view === 'login' && (
           <LoginScreen
-            onDone={() => { setUser(getSession()); setView('profile') }}
+            onDone={async () => {
+              const u = await fetchSession()
+              setUser(u || getSession())
+              setView('profile')
+            }}
             onBack={() => setView('home')}
           />
         )}
@@ -93,7 +108,7 @@ export default function App() {
             user={user}
             onBack={() => setView('home')}
             onStartPlaying={openCode}
-            onLogout={() => { logout(); setUser(null); setView('home') }}
+            onLogout={async () => { await logout(); setUser(null); setView('home') }}
           />
         )}
       </AnimatePresence>
